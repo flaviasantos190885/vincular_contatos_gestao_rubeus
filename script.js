@@ -913,21 +913,40 @@ async function salvarEdicaoContato(idContato, prefixo) {
       }
     }
 
-    var selectTipo = painel.querySelector(".campo-editar-tipo");
+    var selectAcaoTipo = painel.querySelector(".campo-acao-tipo");
 
-    if (selectTipo) {
-      var tipoAlterado = await salvarTipoContatoVinculado(idContato, selectTipo.value);
+    if (selectAcaoTipo && selectAcaoTipo.value !== "manter") {
+      var acaoTipo = selectAcaoTipo.value;
+      var selectTipoAtual = painel.querySelector(".campo-tipo-atual");
+      var selectTipoNovo = painel.querySelector(".campo-tipo-novo");
+      var tipoAtual = selectTipoAtual ? selectTipoAtual.value : "";
+      var tipoNovo = selectTipoNovo ? selectTipoNovo.value : "";
 
-      if (!tipoAlterado) {
+      var tipoSalvo = await salvarTipoContatoVinculado(idContato, nome, acaoTipo, tipoAtual, tipoNovo);
+
+      if (!tipoSalvo.success) {
         if (erro) {
-          erro.textContent = "Os dados do contato foram salvos, mas não foi possível alterar o tipo pessoa. Verifique o console.";
+          erro.textContent = "Os dados do contato foram salvos, mas não foi possível atualizar o tipo pessoa. " + (tipoSalvo.mensagem || "Verifique o console.");
           erro.classList.remove("hidden");
         }
         return;
       }
 
-      var badgeTipo = itemContato ? itemContato.querySelector(".tipo-vinculo-contato") : null;
-      if (badgeTipo) badgeTipo.textContent = obterNomeTipoPessoa(selectTipo.value);
+      var vinculadoAtualizado = contatosVinculadosPorId[String(idContato)];
+      var spanTipos = itemContato ? itemContato.querySelector(".tipos-vinculo-contato") : null;
+
+      if (spanTipos && vinculadoAtualizado) {
+        spanTipos.innerHTML = montarBadgesTipos(vinculadoAtualizado.tipos);
+      }
+
+      var selectTipoAtualizado = painel.querySelector(".campo-tipo-atual");
+      if (selectTipoAtualizado && vinculadoAtualizado) {
+        selectTipoAtualizado.innerHTML = montarOpcoesTiposAtuais(vinculadoAtualizado.tipos);
+      }
+
+      selectAcaoTipo.value = "manter";
+      selectAcaoTipo.dispatchEvent(new Event("change"));
+      if (selectTipoNovo) selectTipoNovo.value = "";
     }
 
     painel.classList.add("hidden");
@@ -1650,13 +1669,20 @@ async function carregarContatosVinculados() {
       pessoas.forEach(function(pessoa) {
         var id = String(pessoa.id);
 
+        var tipo = String(pessoa.tipo || "");
+
         if (String(pessoa.principal) === "1") return;
         if (id === String(dadosRegistroAtual.idPessoa)) return;
-        if (idsJaAdicionados[id]) return;
+
+        if (idsJaAdicionados[id]) {
+          var existente = contatosVinculadosPorId[id];
+          if (tipo && existente.tipos.indexOf(tipo) === -1) existente.tipos.push(tipo);
+          return;
+        }
 
         idsJaAdicionados[id] = true;
 
-        var vinculado = { id: id, tipo: String(pessoa.tipo || "") };
+        var vinculado = { id: id, tipos: tipo ? [tipo] : [] };
         vinculados.push(vinculado);
         contatosVinculadosPorId[id] = vinculado;
       });
@@ -1697,14 +1723,14 @@ function renderizarContatosVinculados(vinculados) {
   container.innerHTML = vinculados.map(function(contato) {
     var id = escaparHtml(contato.id);
     var nome = escaparHtml(contato.nome || "(sem nome)");
-    var tipo = escaparHtml(obterNomeTipoPessoa(contato.tipo));
+    var badgesTipos = montarBadgesTipos(contato.tipos);
     var cpf = contato.cpf ? aplicarMascaraCPF(contato.cpf) : "-";
 
     return `
       <div class="contato-item-resultado" data-id="${id}" data-nome="${nome}" id="${prefixo}contato-${id}" style="display: block; cursor: default;">
         <div id="${prefixo}resumo-contato-${id}">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span class="nome-contato">${nome} <span class="tipo-vinculo-contato" style="display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 10px; background: #e6f6f6; color: #0b8a8a; font-size: 11px; font-weight: 500; vertical-align: middle;">${tipo}</span></span>
+            <span class="nome-contato">${nome} <span class="tipos-vinculo-contato">${badgesTipos}</span></span>
 
             <button type="button" class="btn-editar-contato" data-id-editar="${id}" style="background: #f0f0f0; border: none; color: #0da6a6; font-size: 12px; font-weight: 500; cursor: pointer; padding: 4px 10px; border-radius: 4px; white-space: nowrap; margin-left: 8px;">
               Editar
@@ -1741,9 +1767,26 @@ function renderizarContatosVinculados(vinculados) {
             <input type="tel" class="input-busca campo-editar-telefone" placeholder="(00) 00000-0000" maxlength="15" style="width: 100%; border-radius: 4px; margin-bottom: 8px;">
 
             <label class="label-lista">Tipo pessoa</label>
-            <select class="input-busca campo-editar-tipo" style="width: 100%; border-radius: 4px; margin-bottom: 8px; background-color: #ffffff;">
-              ${montarOpcoesTipoPessoa(contato.tipo)}
+            <select class="input-busca campo-acao-tipo" style="width: 100%; border-radius: 4px; margin-bottom: 8px; background-color: #ffffff;">
+              <option value="manter">Manter como está</option>
+              <option value="adicionar">Adicionar novo tipo (mantém os atuais)</option>
+              <option value="alterar">Alterar um tipo existente</option>
             </select>
+
+            <div class="box-tipo-atual hidden">
+              <label class="label-lista">Tipo que será alterado</label>
+              <select class="input-busca campo-tipo-atual" style="width: 100%; border-radius: 4px; margin-bottom: 8px; background-color: #ffffff;">
+                ${montarOpcoesTiposAtuais(contato.tipos)}
+              </select>
+            </div>
+
+            <div class="box-tipo-novo hidden">
+              <label class="label-lista">Novo tipo</label>
+              <select class="input-busca campo-tipo-novo" style="width: 100%; border-radius: 4px; margin-bottom: 8px; background-color: #ffffff;">
+                <option value="">Selecione o tipo...</option>
+                ${montarOpcoesTipoPessoa()}
+              </select>
+            </div>
 
             <p class="erro-busca hidden campo-editar-erro" style="text-align: left; font-style: normal; padding: 0; margin: 0 0 12px; font-size: 13px;"></p>
 
@@ -1787,6 +1830,19 @@ function renderizarContatosVinculados(vinculados) {
   container.querySelectorAll(".campo-editar-cpf").forEach(function(campo) {
     campo.addEventListener("input", function() {
       this.value = aplicarMascaraCPF(this.value);
+    });
+  });
+
+  container.querySelectorAll(".campo-acao-tipo").forEach(function(campo) {
+    campo.addEventListener("change", function() {
+      var form = this.closest(".form-editar-contato");
+      if (!form) return;
+
+      var boxAtual = form.querySelector(".box-tipo-atual");
+      var boxNovo = form.querySelector(".box-tipo-novo");
+
+      if (boxAtual) boxAtual.classList.toggle("hidden", this.value !== "alterar");
+      if (boxNovo) boxNovo.classList.toggle("hidden", this.value === "manter");
     });
   });
 
@@ -1856,25 +1912,25 @@ function adicionarEstilosExtras() {
   document.head.appendChild(estilo);
 }
 
-function montarOpcoesTipoPessoa(tipoAtual) {
-  var atual = String(tipoAtual || "");
-  var opcoes = TIPOS_VINCULO.slice();
-
-  var atualNaLista = opcoes.some(function(item) {
-    return item.value === atual;
-  });
-
-  if (atual && !atualNaLista) {
-    opcoes.unshift({ value: atual, label: obterNomeTipoPessoa(atual) });
-  }
-
-  return opcoes.map(function(item) {
-    var selecionado = item.value === atual ? " selected" : "";
-    return `<option value="${escaparHtml(item.value)}"${selecionado}>${escaparHtml(item.label)}</option>`;
+function montarBadgesTipos(tipos) {
+  return (tipos || []).map(function(tipo) {
+    return `<span class="tipo-vinculo-contato" style="display: inline-block; margin: 2px 0 2px 6px; padding: 2px 8px; border-radius: 10px; background: #e6f6f6; color: #0b8a8a; font-size: 11px; font-weight: 500; vertical-align: middle;">${escaparHtml(obterNomeTipoPessoa(tipo))}</span>`;
   }).join("");
 }
 
-async function atualizarTipoPessoaNoRegistro(idRegistro, idContato, novoTipo) {
+function montarOpcoesTipoPessoa() {
+  return TIPOS_VINCULO.map(function(item) {
+    return `<option value="${escaparHtml(item.value)}">${escaparHtml(item.label)}</option>`;
+  }).join("");
+}
+
+function montarOpcoesTiposAtuais(tipos) {
+  return (tipos || []).map(function(tipo) {
+    return `<option value="${escaparHtml(tipo)}">${escaparHtml(obterNomeTipoPessoa(tipo))}</option>`;
+  }).join("");
+}
+
+async function atualizarTipoPessoaNoRegistro(idRegistro, idContato, acao, tipoAtual, tipoNovo) {
   var registro = await buscarDadosApi("Registro/dados", idRegistro);
 
   if (!registro || !registro.success || !registro.dados) {
@@ -1891,19 +1947,41 @@ async function atualizarTipoPessoaNoRegistro(idRegistro, idContato, novoTipo) {
     };
   });
 
-  var pessoaExistente = pessoas.find(function(pessoa) {
+  var vinculosDoContato = pessoas.filter(function(pessoa) {
     return pessoa.id === String(idContato);
   });
 
-  if (!pessoaExistente) {
+  if (vinculosDoContato.length === 0) {
     return { success: true, ignorado: true };
   }
 
-  if (pessoaExistente.tipo === String(novoTipo)) {
-    return { success: true, semAlteracao: true };
-  }
+  var jaTemTipoNovo = vinculosDoContato.some(function(pessoa) {
+    return pessoa.tipo === String(tipoNovo);
+  });
 
-  pessoaExistente.tipo = String(novoTipo);
+  if (acao === "adicionar") {
+    if (jaTemTipoNovo) {
+      return { success: true, semAlteracao: true };
+    }
+
+    pessoas.push({ id: String(idContato), tipo: String(tipoNovo), principal: "0" });
+  }
+  else {
+    var vinculoAlterado = vinculosDoContato.find(function(pessoa) {
+      return pessoa.tipo === String(tipoAtual);
+    });
+
+    if (!vinculoAlterado) {
+      return { success: true, ignorado: true };
+    }
+
+    if (jaTemTipoNovo) {
+      pessoas.splice(pessoas.indexOf(vinculoAlterado), 1);
+    }
+    else {
+      vinculoAlterado.tipo = String(tipoNovo);
+    }
+  }
 
   var response = await fetch("https://crmrbacademy.apprubeus.com.br/api/Oportunidade/alterarPessoas", {
     method: "POST",
@@ -1919,49 +1997,84 @@ async function atualizarTipoPessoaNoRegistro(idRegistro, idContato, novoTipo) {
   return response.json();
 }
 
-async function salvarTipoContatoVinculado(idContato, novoTipo) {
+async function salvarTipoContatoVinculado(idContato, nomeContato, acao, tipoAtual, tipoNovo) {
   var vinculado = contatosVinculadosPorId[String(idContato)];
 
-  if (!novoTipo || (vinculado && vinculado.tipo === String(novoTipo))) {
-    return true;
+  if (!tipoNovo) {
+    return { success: false, mensagem: "Selecione o novo tipo." };
+  }
+
+  if (acao === "alterar" && !tipoAtual) {
+    return { success: false, mensagem: "Selecione o tipo que será alterado." };
+  }
+
+  if (acao === "alterar" && tipoAtual === tipoNovo) {
+    return { success: true };
+  }
+
+  if (acao === "adicionar" && vinculado && vinculado.tipos.indexOf(String(tipoNovo)) !== -1) {
+    return { success: false, mensagem: "O contato já possui este tipo." };
   }
 
   try {
     var idsRegistros = obterIdsRegistrosProcessoGestao();
-    var idsEspelho = [];
 
     Object.keys(MAPA_PROCESSO_ESPELHO).forEach(function(idProcesso) {
       if (idProcesso !== PROCESSO_GESTAO) {
-        idsEspelho = idsEspelho.concat(obterIdsRegistrosDoProcesso(idProcesso));
+        idsRegistros = idsRegistros.concat(obterIdsRegistrosDoProcesso(idProcesso));
       }
     });
 
-    var todosRegistros = idsRegistros.concat(idsEspelho).filter(function(id, indice, lista) {
+    idsRegistros = idsRegistros.filter(function(id, indice, lista) {
       return lista.indexOf(id) === indice;
     });
 
     var sucesso = true;
 
-    for (var i = 0; i < todosRegistros.length; i++) {
-      var resultado = await atualizarTipoPessoaNoRegistro(todosRegistros[i], idContato, novoTipo);
+    for (var i = 0; i < idsRegistros.length; i++) {
+      var resultado = await atualizarTipoPessoaNoRegistro(idsRegistros[i], idContato, acao, tipoAtual, tipoNovo);
 
       if (!resultado || !resultado.success) {
         sucesso = false;
-        console.warn("Falha ao alterar o tipo pessoa no registro " + todosRegistros[i] + ":", resultado);
+        console.warn("Falha ao atualizar o tipo pessoa no registro " + idsRegistros[i] + ":", resultado);
       }
       else if (!resultado.ignorado && !resultado.semAlteracao) {
-        console.log("Tipo pessoa alterado no registro " + todosRegistros[i]);
+        console.log("Tipo pessoa (" + acao + ") atualizado no registro " + idsRegistros[i]);
       }
     }
 
-    if (sucesso && vinculado) {
-      vinculado.tipo = String(novoTipo);
+    if (!sucesso) {
+      return { success: false };
     }
 
-    return sucesso;
+    if (vinculado) {
+      if (acao === "adicionar") {
+        vinculado.tipos.push(String(tipoNovo));
+      }
+      else {
+        vinculado.tipos = vinculado.tipos.filter(function(tipo) {
+          return tipo !== String(tipoAtual);
+        });
+
+        if (vinculado.tipos.indexOf(String(tipoNovo)) === -1) {
+          vinculado.tipos.push(String(tipoNovo));
+        }
+      }
+    }
+
+    if (acao === "adicionar" && REGISTRAR_EVENTO_VINCULO) {
+      try {
+        await cadastrarEventoVinculo({ id: idContato, nome: nomeContato }, tipoNovo);
+      }
+      catch (erroEvento) {
+        console.warn(erroEvento);
+      }
+    }
+
+    return { success: true };
   }
   catch (erro) {
-    console.error("Erro ao alterar o tipo pessoa:", erro);
-    return false;
+    console.error("Erro ao atualizar o tipo pessoa:", erro);
+    return { success: false };
   }
 }
