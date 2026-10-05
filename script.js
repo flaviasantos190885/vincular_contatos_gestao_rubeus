@@ -917,6 +917,10 @@ async function salvarEdicaoContato(idContato, prefixo) {
     fecharEdicaoContato(idContato, prefixo);
 
     mostrarMensagem("Contato atualizado com sucesso!", "sucesso");
+
+    if (prefixo.indexOf("vinc") === 0) {
+      carregarContatosVinculados();
+    }
   }
   catch (error) {
     console.error(error);
@@ -1638,17 +1642,17 @@ async function carregarContatosVinculados() {
         if (String(pessoa.principal) === "1") return;
         if (id === String(dadosRegistroAtual.idPessoa)) return;
 
-        if (idsJaAdicionados[id]) {
-          var existente = contatosVinculadosPorId[id];
-          if (tipo && existente.tipos.indexOf(tipo) === -1) existente.tipos.push(tipo);
-          return;
+        var chave = id + "|" + tipo;
+        if (idsJaAdicionados[chave]) return;
+        idsJaAdicionados[chave] = true;
+
+        if (!contatosVinculadosPorId[id]) {
+          contatosVinculadosPorId[id] = { id: id, tipos: [] };
         }
 
-        idsJaAdicionados[id] = true;
+        if (tipo) contatosVinculadosPorId[id].tipos.push(tipo);
 
-        var vinculado = { id: id, tipos: tipo ? [tipo] : [] };
-        vinculados.push(vinculado);
-        contatosVinculadosPorId[id] = vinculado;
+        vinculados.push({ id: id, tipos: tipo ? [tipo] : [] });
       });
     });
 
@@ -1657,15 +1661,23 @@ async function carregarContatosVinculados() {
       return;
     }
 
-    var dadosPessoas = await Promise.all(vinculados.map(function(vinculado) {
-      return buscarDadosApi("Pessoa/dados", vinculado.id).catch(function(erro) {
-        console.warn("Erro ao buscar dados do contato vinculado " + vinculado.id + ":", erro);
+    var idsUnicos = Object.keys(contatosVinculadosPorId);
+
+    var dadosPessoas = await Promise.all(idsUnicos.map(function(idPessoa) {
+      return buscarDadosApi("Pessoa/dados", idPessoa).catch(function(erro) {
+        console.warn("Erro ao buscar dados do contato vinculado " + idPessoa + ":", erro);
         return null;
       });
     }));
 
-    vinculados.forEach(function(vinculado, indice) {
-      var dados = dadosPessoas[indice] && dadosPessoas[indice].success ? dadosPessoas[indice].dados || {} : {};
+    var dadosPorId = {};
+
+    idsUnicos.forEach(function(idPessoa, indice) {
+      dadosPorId[idPessoa] = dadosPessoas[indice] && dadosPessoas[indice].success ? dadosPessoas[indice].dados || {} : {};
+    });
+
+    vinculados.forEach(function(vinculado) {
+      var dados = dadosPorId[vinculado.id] || {};
       vinculado.nome = dados.nome || "";
       vinculado.cpf = dados.cpf || "";
     });
@@ -1682,9 +1694,8 @@ function renderizarContatosVinculados(vinculados) {
   var container = document.getElementById("lista-contatos-vinculados");
   if (!container) return;
 
-  var prefixo = "vinc-";
-
-  container.innerHTML = vinculados.map(function(contato) {
+  container.innerHTML = vinculados.map(function(contato, indice) {
+    var prefixo = "vinc" + indice + "-";
     var id = escaparHtml(contato.id);
     var nome = escaparHtml(contato.nome || "(sem nome)");
     var badgesTipos = montarBadgesTipos(contato.tipos, contato.id);
@@ -1696,7 +1707,7 @@ function renderizarContatosVinculados(vinculados) {
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span class="nome-contato">${nome} <span class="tipos-vinculo-contato">${badgesTipos}</span></span>
 
-            <button type="button" class="btn-editar-contato" data-id-editar="${id}" style="background: #f0f0f0; border: none; color: #0da6a6; font-size: 12px; font-weight: 500; cursor: pointer; padding: 4px 10px; border-radius: 4px; white-space: nowrap; margin-left: 8px;">
+            <button type="button" class="btn-editar-contato" data-id-editar="${id}" data-prefixo="${prefixo}" style="background: #f0f0f0; border: none; color: #0da6a6; font-size: 12px; font-weight: 500; cursor: pointer; padding: 4px 10px; border-radius: 4px; white-space: nowrap; margin-left: 8px;">
               Editar
             </button>
           </div>
@@ -1733,11 +1744,11 @@ function renderizarContatosVinculados(vinculados) {
             <p class="erro-busca hidden campo-editar-erro" style="text-align: left; font-style: normal; padding: 0; margin: 0 0 12px; font-size: 13px;"></p>
 
             <div style="display: flex; gap: 10px; justify-content: flex-end;">
-              <button type="button" class="btn-busca btn-cancelar-editar" data-id-editar="${id}" style="background-color: #ffffff; color: #0da6a6; border: 1px solid #0da6a6; width: auto; padding: 0 20px; border-radius: 4px;">
+              <button type="button" class="btn-busca btn-cancelar-editar" data-id-editar="${id}" data-prefixo="${prefixo}" style="background-color: #ffffff; color: #0da6a6; border: 1px solid #0da6a6; width: auto; padding: 0 20px; border-radius: 4px;">
                 <p class="texto-pesquisar">Cancelar</p>
               </button>
 
-              <button type="button" class="btn-busca btn-salvar-editar" data-id-editar="${id}" style="width: auto; padding: 0 20px; border-radius: 4px; gap: 8px;">
+              <button type="button" class="btn-busca btn-salvar-editar" data-id-editar="${id}" data-prefixo="${prefixo}" style="width: auto; padding: 0 20px; border-radius: 4px; gap: 8px;">
                 <div class="loader-btn hidden loader-editar"></div>
                 <p class="texto-pesquisar">Salvar alterações</p>
               </button>
@@ -1754,28 +1765,32 @@ function renderizarContatosVinculados(vinculados) {
       if (!badge) return;
 
       evento.stopPropagation();
-      abrirModalTipoPessoa(badge.getAttribute("data-id-contato"), badge.getAttribute("data-tipo"));
+
+      var card = badge.closest(".contato-item-resultado");
+      var nomeCard = card ? card.getAttribute("data-nome") : "";
+
+      abrirModalTipoPessoa(badge.getAttribute("data-id-contato"), badge.getAttribute("data-tipo"), nomeCard);
     });
   });
 
   container.querySelectorAll(".btn-editar-contato").forEach(function(botao) {
     botao.addEventListener("click", function(evento) {
       evento.stopPropagation();
-      abrirEdicaoContato(this.getAttribute("data-id-editar"), prefixo);
+      abrirEdicaoContato(this.getAttribute("data-id-editar"), this.getAttribute("data-prefixo"));
     });
   });
 
   container.querySelectorAll(".btn-cancelar-editar").forEach(function(botao) {
     botao.addEventListener("click", function(evento) {
       evento.stopPropagation();
-      fecharEdicaoContato(this.getAttribute("data-id-editar"), prefixo);
+      fecharEdicaoContato(this.getAttribute("data-id-editar"), this.getAttribute("data-prefixo"));
     });
   });
 
   container.querySelectorAll(".btn-salvar-editar").forEach(function(botao) {
     botao.addEventListener("click", function(evento) {
       evento.stopPropagation();
-      salvarEdicaoContato(this.getAttribute("data-id-editar"), prefixo);
+      salvarEdicaoContato(this.getAttribute("data-id-editar"), this.getAttribute("data-prefixo"));
     });
   });
 
@@ -1893,36 +1908,71 @@ function adicionarEstilosExtras() {
       color: #555;
     }
 
+    .modal-tipo-pessoa-pergunta {
+      margin: 0 0 6px;
+      font-weight: 600;
+      color: #555;
+    }
+
     .modal-tipo-pessoa-opcoes {
       display: flex;
-      flex-direction: column;
-      gap: 6px;
-      margin-bottom: 12px;
-    }
-
-    .modal-tipo-pessoa-opcoes label {
-      display: flex;
-      align-items: center;
       gap: 8px;
-      cursor: pointer;
-      font-weight: normal;
-      margin: 0;
+      margin-bottom: 14px;
     }
 
-    .modal-tipo-pessoa-busca {
-      width: 100%;
-      height: 34px;
-      padding: 0 10px;
-      font-size: 13px;
+    .modal-tipo-pessoa-opcao {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+      padding: 8px 10px;
       border: 1px solid #ddd;
       border-radius: 4px;
-      box-sizing: border-box;
-      margin-bottom: 8px;
+      background: #ffffff;
+      color: #333;
+      text-align: left;
+      cursor: pointer;
+      font-size: 13px;
+      line-height: 1.3;
     }
 
-    .modal-tipo-pessoa-busca:focus {
+    .modal-tipo-pessoa-opcao span {
+      font-size: 11px;
+      color: #888;
+    }
+
+    .modal-tipo-pessoa-opcao.ativa {
       border-color: #0da6a6;
+      background: #e6f6f6;
+      box-shadow: inset 0 0 0 1px #0da6a6;
+    }
+
+    .modal-tipo-pessoa-opcao.ativa strong {
+      color: #0b8a8a;
+    }
+
+    .modal-tipo-pessoa input.modal-tipo-pessoa-busca {
+      width: 100% !important;
+      height: 34px !important;
+      padding: 0 10px !important;
+      margin: 0 0 8px !important;
+      font-size: 13px !important;
+      border: 1px solid #ddd !important;
+      border-radius: 4px !important;
+      box-shadow: none !important;
+      background: #ffffff !important;
+      box-sizing: border-box !important;
+    }
+
+    .modal-tipo-pessoa input.modal-tipo-pessoa-busca:focus {
+      border-color: #0da6a6 !important;
       outline: none;
+    }
+
+    .modal-tipo-pessoa input.modal-tipo-pessoa-busca::placeholder {
+      font-size: 13px;
+      color: #aaa;
     }
 
     .modal-tipo-pessoa-lista {
@@ -1933,8 +1983,9 @@ function adicionarEstilosExtras() {
     }
 
     .modal-tipo-pessoa-item {
-      padding: 7px 10px;
+      padding: 6px 10px;
       cursor: pointer;
+      font-size: 13px;
     }
 
     .modal-tipo-pessoa-item:hover {
@@ -2203,13 +2254,12 @@ function fecharModalTipoPessoa() {
   if (modal) modal.remove();
 }
 
-function abrirModalTipoPessoa(idContato, tipoAtual) {
+function abrirModalTipoPessoa(idContato, tipoAtual, nomeContato) {
   fecharModalTipoPessoa();
 
-  var vinculado = contatosVinculadosPorId[String(idContato)];
-  var itemContato = document.getElementById("vinc-contato-" + idContato);
-  var nomeContato = itemContato ? itemContato.getAttribute("data-nome") : "";
+  nomeContato = nomeContato || "";
   var tipoSelecionado = "";
+  var acao = "alterar";
 
   var fundo = document.createElement("div");
   fundo.id = "modal-tipo-pessoa";
@@ -2225,9 +2275,16 @@ function abrirModalTipoPessoa(idContato, tipoAtual) {
       <div class="modal-tipo-pessoa-corpo">
         <p class="tipo-atual">Tipo atual: <strong>${escaparHtml(obterNomeTipoPessoa(tipoAtual))}</strong></p>
 
+        <p class="modal-tipo-pessoa-pergunta">O que deseja fazer?</p>
         <div class="modal-tipo-pessoa-opcoes">
-          <label><input type="radio" name="acao-tipo-pessoa" value="alterar" checked> Alterar este tipo</label>
-          <label><input type="radio" name="acao-tipo-pessoa" value="adicionar"> Adicionar novo tipo (mantém o atual)</label>
+          <button type="button" class="modal-tipo-pessoa-opcao ativa" data-acao="alterar">
+            <strong>Alterar este tipo</strong>
+            <span>Troca o tipo atual pelo novo</span>
+          </button>
+          <button type="button" class="modal-tipo-pessoa-opcao" data-acao="adicionar">
+            <strong>Adicionar novo vínculo</strong>
+            <span>Mantém o atual e cria outro vínculo</span>
+          </button>
         </div>
 
         <input type="text" class="modal-tipo-pessoa-busca" placeholder="Digite para buscar o tipo..." autocomplete="off">
@@ -2284,6 +2341,16 @@ function abrirModalTipoPessoa(idContato, tipoAtual) {
 
   busca.addEventListener("input", renderizarLista);
 
+  fundo.querySelectorAll(".modal-tipo-pessoa-opcao").forEach(function(botao) {
+    botao.addEventListener("click", function() {
+      acao = this.getAttribute("data-acao");
+
+      fundo.querySelectorAll(".modal-tipo-pessoa-opcao").forEach(function(outro) {
+        outro.classList.toggle("ativa", outro === botao);
+      });
+    });
+  });
+
   fundo.querySelector(".modal-tipo-pessoa-fechar").addEventListener("click", fecharModalTipoPessoa);
   fundo.querySelector(".modal-tipo-pessoa-cancelar").addEventListener("click", fecharModalTipoPessoa);
 
@@ -2298,8 +2365,6 @@ function abrirModalTipoPessoa(idContato, tipoAtual) {
       mostrarErro("Selecione um tipo na lista.");
       return;
     }
-
-    var acao = fundo.querySelector('input[name="acao-tipo-pessoa"]:checked').value;
 
     if (acao === "alterar" && tipoSelecionado === String(tipoAtual)) {
       fecharModalTipoPessoa();
@@ -2318,15 +2383,11 @@ function abrirModalTipoPessoa(idContato, tipoAtual) {
       return;
     }
 
-    var spanTipos = itemContato ? itemContato.querySelector(".tipos-vinculo-contato") : null;
-
-    if (spanTipos && vinculado) {
-      spanTipos.innerHTML = montarBadgesTipos(vinculado.tipos, idContato);
-    }
-
     fecharModalTipoPessoa();
 
-    mostrarMensagem(acao === "adicionar" ? "Novo tipo adicionado com sucesso!" : "Tipo pessoa alterado com sucesso!", "sucesso");
+    mostrarMensagem(acao === "adicionar" ? "Novo vínculo adicionado com sucesso!" : "Tipo pessoa alterado com sucesso!", "sucesso");
+
+    carregarContatosVinculados();
   });
 
   renderizarLista();
