@@ -8,6 +8,7 @@ const MAPA_PROCESSO_ESPELHO = {
 const PROCESSO_GESTAO = "76";
 let MAPA_TODOS_TIPOS_PESSOA = {};
 let promessaTiposVinculo = null;
+let contatosVinculadosPorId = {};
 
 let TIPOS_VINCULO = [
   { value: "107", label: "(Analista) CRM" },
@@ -912,6 +913,23 @@ async function salvarEdicaoContato(idContato, prefixo) {
       }
     }
 
+    var selectTipo = painel.querySelector(".campo-editar-tipo");
+
+    if (selectTipo) {
+      var tipoAlterado = await salvarTipoContatoVinculado(idContato, selectTipo.value);
+
+      if (!tipoAlterado) {
+        if (erro) {
+          erro.textContent = "Os dados do contato foram salvos, mas não foi possível alterar o tipo pessoa. Verifique o console.";
+          erro.classList.remove("hidden");
+        }
+        return;
+      }
+
+      var badgeTipo = itemContato ? itemContato.querySelector(".tipo-vinculo-contato") : null;
+      if (badgeTipo) badgeTipo.textContent = obterNomeTipoPessoa(selectTipo.value);
+    }
+
     painel.classList.add("hidden");
     fecharEdicaoContato(idContato, prefixo);
 
@@ -1547,7 +1565,11 @@ function obterNomeTipoPessoa(idTipo) {
 }
 
 function obterIdsRegistrosProcessoGestao() {
-  if (dadosRegistroAtual.idProcesso === PROCESSO_GESTAO) {
+  return obterIdsRegistrosDoProcesso(PROCESSO_GESTAO);
+}
+
+function obterIdsRegistrosDoProcesso(idProcessoAlvo) {
+  if (dadosRegistroAtual.idProcesso === idProcessoAlvo) {
     return [String(dadosRegistroAtual.idRegistro)];
   }
 
@@ -1563,7 +1585,7 @@ function obterIdsRegistrosProcessoGestao() {
     .filter(function(registro) {
       var idProcesso = registro.processo || registro.idProcesso || registro.funil || registro.idFunil;
       var etapaNome = (registro.etapaNome || "").toLowerCase();
-      return String(idProcesso) === PROCESSO_GESTAO && etapaNome.indexOf("evas") === -1;
+      return String(idProcesso) === idProcessoAlvo && etapaNome.indexOf("evas") === -1;
     })
     .map(function(registro) {
       return String(registro.id);
@@ -1618,6 +1640,7 @@ async function carregarContatosVinculados() {
 
     var vinculados = [];
     var idsJaAdicionados = {};
+    contatosVinculadosPorId = {};
 
     registros.forEach(function(registro) {
       if (!registro || !registro.success || !registro.dados) return;
@@ -1632,7 +1655,10 @@ async function carregarContatosVinculados() {
         if (idsJaAdicionados[id]) return;
 
         idsJaAdicionados[id] = true;
-        vinculados.push({ id: id, tipo: String(pessoa.tipo || "") });
+
+        var vinculado = { id: id, tipo: String(pessoa.tipo || "") };
+        vinculados.push(vinculado);
+        contatosVinculadosPorId[id] = vinculado;
       });
     });
 
@@ -1713,6 +1739,11 @@ function renderizarContatosVinculados(vinculados) {
 
             <label class="label-lista">Telefone</label>
             <input type="tel" class="input-busca campo-editar-telefone" placeholder="(00) 00000-0000" maxlength="15" style="width: 100%; border-radius: 4px; margin-bottom: 8px;">
+
+            <label class="label-lista">Tipo pessoa</label>
+            <select class="input-busca campo-editar-tipo" style="width: 100%; border-radius: 4px; margin-bottom: 8px; background-color: #ffffff;">
+              ${montarOpcoesTipoPessoa(contato.tipo)}
+            </select>
 
             <p class="erro-busca hidden campo-editar-erro" style="text-align: left; font-style: normal; padding: 0; margin: 0 0 12px; font-size: 13px;"></p>
 
@@ -1823,4 +1854,114 @@ function adicionarEstilosExtras() {
   `;
 
   document.head.appendChild(estilo);
+}
+
+function montarOpcoesTipoPessoa(tipoAtual) {
+  var atual = String(tipoAtual || "");
+  var opcoes = TIPOS_VINCULO.slice();
+
+  var atualNaLista = opcoes.some(function(item) {
+    return item.value === atual;
+  });
+
+  if (atual && !atualNaLista) {
+    opcoes.unshift({ value: atual, label: obterNomeTipoPessoa(atual) });
+  }
+
+  return opcoes.map(function(item) {
+    var selecionado = item.value === atual ? " selected" : "";
+    return `<option value="${escaparHtml(item.value)}"${selecionado}>${escaparHtml(item.label)}</option>`;
+  }).join("");
+}
+
+async function atualizarTipoPessoaNoRegistro(idRegistro, idContato, novoTipo) {
+  var registro = await buscarDadosApi("Registro/dados", idRegistro);
+
+  if (!registro || !registro.success || !registro.dados) {
+    return { success: false, errors: "Não foi possível obter os dados do registro " + idRegistro + "." };
+  }
+
+  var pessoasAtuais = Array.isArray(registro.dados.pessoas) ? registro.dados.pessoas : [];
+
+  var pessoas = pessoasAtuais.map(function(pessoa) {
+    return {
+      id: String(pessoa.id),
+      tipo: String(pessoa.tipo || ""),
+      principal: String(pessoa.principal || "0")
+    };
+  });
+
+  var pessoaExistente = pessoas.find(function(pessoa) {
+    return pessoa.id === String(idContato);
+  });
+
+  if (!pessoaExistente) {
+    return { success: true, ignorado: true };
+  }
+
+  if (pessoaExistente.tipo === String(novoTipo)) {
+    return { success: true, semAlteracao: true };
+  }
+
+  pessoaExistente.tipo = String(novoTipo);
+
+  var response = await fetch("https://crmrbacademy.apprubeus.com.br/api/Oportunidade/alterarPessoas", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: idRegistro,
+      pessoas: pessoas,
+      origem: "600",
+      token: "ebbbd780c70a67d9bdc903267c2a0544"
+    })
+  });
+
+  return response.json();
+}
+
+async function salvarTipoContatoVinculado(idContato, novoTipo) {
+  var vinculado = contatosVinculadosPorId[String(idContato)];
+
+  if (!novoTipo || (vinculado && vinculado.tipo === String(novoTipo))) {
+    return true;
+  }
+
+  try {
+    var idsRegistros = obterIdsRegistrosProcessoGestao();
+    var idsEspelho = [];
+
+    Object.keys(MAPA_PROCESSO_ESPELHO).forEach(function(idProcesso) {
+      if (idProcesso !== PROCESSO_GESTAO) {
+        idsEspelho = idsEspelho.concat(obterIdsRegistrosDoProcesso(idProcesso));
+      }
+    });
+
+    var todosRegistros = idsRegistros.concat(idsEspelho).filter(function(id, indice, lista) {
+      return lista.indexOf(id) === indice;
+    });
+
+    var sucesso = true;
+
+    for (var i = 0; i < todosRegistros.length; i++) {
+      var resultado = await atualizarTipoPessoaNoRegistro(todosRegistros[i], idContato, novoTipo);
+
+      if (!resultado || !resultado.success) {
+        sucesso = false;
+        console.warn("Falha ao alterar o tipo pessoa no registro " + todosRegistros[i] + ":", resultado);
+      }
+      else if (!resultado.ignorado && !resultado.semAlteracao) {
+        console.log("Tipo pessoa alterado no registro " + todosRegistros[i]);
+      }
+    }
+
+    if (sucesso && vinculado) {
+      vinculado.tipo = String(novoTipo);
+    }
+
+    return sucesso;
+  }
+  catch (erro) {
+    console.error("Erro ao alterar o tipo pessoa:", erro);
+    return false;
+  }
 }
