@@ -246,7 +246,7 @@ function criarInterface() {
         </div>
       </div>
 
-      <div class="container-resultados">
+      <div id="container-contatos-encontrados" class="container-resultados hidden">
         <label class="rb-label-form label-lista">Contatos encontrados</label>
         <div id="lista-contatos-container" class="lista-contatos-container">
           <p class="sem-contatos">Use a busca acima para encontrar contatos</p>
@@ -287,6 +287,7 @@ function criarInterface() {
   `;
 
   container.innerHTML = html;
+  adicionarEstilosExtras();
   configurarEventos();
   atualizarListaContatosSelecionados();
   carregarContatosVinculados();
@@ -423,6 +424,9 @@ function buscaEstudante() {
     mostrarMensagem("Digite pelo menos 3 caracteres para realizar a busca.", "aviso");
     return;
   }
+
+  var containerEncontrados = document.getElementById("container-contatos-encontrados");
+  if (containerEncontrados) containerEncontrados.classList.remove("hidden");
 
   var listaContatos = document.getElementById("lista-contatos-container");
 
@@ -641,7 +645,7 @@ function processarResultadoBusca(data) {
                 <p style="font-size: 12px; color: #888; margin: 0;">Carregando dados do contato...</p>
               </div>
 
-              <div id="form-editar-${contato.id}" class="hidden">
+              <div id="form-editar-${contato.id}" class="hidden form-editar-contato">
                 <label class="label-lista">Nome</label>
                 <input class="input-busca campo-editar-nome" placeholder="Nome do contato" style="width: 100%; border-radius: 4px; margin-bottom: 12px;">
 
@@ -1324,6 +1328,9 @@ function finalizarProcesso(requisicoesComErro) {
         listaContatos.innerHTML = `<p class="sem-contatos">Use a busca acima para encontrar contatos</p>`;
       }
 
+      var containerEncontrados = document.getElementById("container-contatos-encontrados");
+      if (containerEncontrados) containerEncontrados.classList.add("hidden");
+
       var inputBusca = document.getElementById("input-busca");
       if (inputBusca) inputBusca.value = "";
 
@@ -1694,7 +1701,7 @@ function renderizarContatosVinculados(vinculados) {
             <p style="font-size: 12px; color: #888; margin: 0;">Carregando dados do contato...</p>
           </div>
 
-          <div id="${prefixo}form-editar-${id}" class="hidden">
+          <div id="${prefixo}form-editar-${id}" class="hidden form-editar-contato">
             <label class="label-lista">Nome</label>
             <input class="input-busca campo-editar-nome" placeholder="Nome do contato" style="width: 100%; border-radius: 4px; margin-bottom: 12px;">
 
@@ -1757,4 +1764,63 @@ function renderizarContatosVinculados(vinculados) {
       this.value = aplicarMascaraTelefone(this.value);
     });
   });
+}
+
+function adicionarEstilosExtras() {
+  if (document.getElementById("estilos-extras-vinculo")) return;
+
+  var estilo = document.createElement("style");
+  estilo.id = "estilos-extras-vinculo";
+  estilo.textContent = `
+    .form-editar-contato {
+      font-family: inherit;
+    }
+
+    .form-editar-contato .label-lista {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #555;
+      margin: 0 0 4px;
+    }
+
+    .form-editar-contato .input-busca {
+      font-family: inherit;
+      font-size: 13px;
+      color: #333;
+      height: 34px;
+      padding: 0 10px;
+      margin-bottom: 10px !important;
+      border: 1px solid #ddd;
+      box-sizing: border-box;
+    }
+
+    .form-editar-contato .input-busca:focus {
+      border-color: #0da6a6;
+      outline: none;
+    }
+
+    .form-editar-contato .input-busca::placeholder {
+      font-size: 13px;
+      color: #aaa;
+    }
+
+    .form-editar-contato .btn-busca {
+      height: 32px;
+      min-height: 32px;
+      padding: 0 14px !important;
+    }
+
+    .form-editar-contato .btn-busca .texto-pesquisar {
+      font-family: inherit;
+      font-size: 13px;
+      margin: 0;
+    }
+
+    .form-editar-contato .campo-editar-erro {
+      font-size: 12px !important;
+    }
+  `;
+
+  document.head.appendChild(estilo);
 }
