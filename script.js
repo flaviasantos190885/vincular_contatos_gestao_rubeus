@@ -913,42 +913,6 @@ async function salvarEdicaoContato(idContato, prefixo) {
       }
     }
 
-    var selectAcaoTipo = painel.querySelector(".campo-acao-tipo");
-
-    if (selectAcaoTipo && selectAcaoTipo.value !== "manter") {
-      var acaoTipo = selectAcaoTipo.value;
-      var selectTipoAtual = painel.querySelector(".campo-tipo-atual");
-      var selectTipoNovo = painel.querySelector(".campo-tipo-novo");
-      var tipoAtual = selectTipoAtual ? selectTipoAtual.value : "";
-      var tipoNovo = selectTipoNovo ? selectTipoNovo.value : "";
-
-      var tipoSalvo = await salvarTipoContatoVinculado(idContato, nome, acaoTipo, tipoAtual, tipoNovo);
-
-      if (!tipoSalvo.success) {
-        if (erro) {
-          erro.textContent = "Os dados do contato foram salvos, mas não foi possível atualizar o tipo pessoa. " + (tipoSalvo.mensagem || "Verifique o console.");
-          erro.classList.remove("hidden");
-        }
-        return;
-      }
-
-      var vinculadoAtualizado = contatosVinculadosPorId[String(idContato)];
-      var spanTipos = itemContato ? itemContato.querySelector(".tipos-vinculo-contato") : null;
-
-      if (spanTipos && vinculadoAtualizado) {
-        spanTipos.innerHTML = montarBadgesTipos(vinculadoAtualizado.tipos);
-      }
-
-      var selectTipoAtualizado = painel.querySelector(".campo-tipo-atual");
-      if (selectTipoAtualizado && vinculadoAtualizado) {
-        selectTipoAtualizado.innerHTML = montarOpcoesTiposAtuais(vinculadoAtualizado.tipos);
-      }
-
-      selectAcaoTipo.value = "manter";
-      selectAcaoTipo.dispatchEvent(new Event("change"));
-      if (selectTipoNovo) selectTipoNovo.value = "";
-    }
-
     painel.classList.add("hidden");
     fecharEdicaoContato(idContato, prefixo);
 
@@ -1723,7 +1687,7 @@ function renderizarContatosVinculados(vinculados) {
   container.innerHTML = vinculados.map(function(contato) {
     var id = escaparHtml(contato.id);
     var nome = escaparHtml(contato.nome || "(sem nome)");
-    var badgesTipos = montarBadgesTipos(contato.tipos);
+    var badgesTipos = montarBadgesTipos(contato.tipos, contato.id);
     var cpf = contato.cpf ? aplicarMascaraCPF(contato.cpf) : "-";
 
     return `
@@ -1766,28 +1730,6 @@ function renderizarContatosVinculados(vinculados) {
             <label class="label-lista">Telefone</label>
             <input type="tel" class="input-busca campo-editar-telefone" placeholder="(00) 00000-0000" maxlength="15" style="width: 100%; border-radius: 4px; margin-bottom: 8px;">
 
-            <label class="label-lista">Tipo pessoa</label>
-            <select class="input-busca campo-acao-tipo" style="width: 100%; border-radius: 4px; margin-bottom: 8px; background-color: #ffffff;">
-              <option value="manter">Manter como está</option>
-              <option value="adicionar">Adicionar novo tipo (mantém os atuais)</option>
-              <option value="alterar">Alterar um tipo existente</option>
-            </select>
-
-            <div class="box-tipo-atual hidden">
-              <label class="label-lista">Tipo que será alterado</label>
-              <select class="input-busca campo-tipo-atual" style="width: 100%; border-radius: 4px; margin-bottom: 8px; background-color: #ffffff;">
-                ${montarOpcoesTiposAtuais(contato.tipos)}
-              </select>
-            </div>
-
-            <div class="box-tipo-novo hidden">
-              <label class="label-lista">Novo tipo</label>
-              <select class="input-busca campo-tipo-novo" style="width: 100%; border-radius: 4px; margin-bottom: 8px; background-color: #ffffff;">
-                <option value="">Selecione o tipo...</option>
-                ${montarOpcoesTipoPessoa()}
-              </select>
-            </div>
-
             <p class="erro-busca hidden campo-editar-erro" style="text-align: left; font-style: normal; padding: 0; margin: 0 0 12px; font-size: 13px;"></p>
 
             <div style="display: flex; gap: 10px; justify-content: flex-end;">
@@ -1805,6 +1747,16 @@ function renderizarContatosVinculados(vinculados) {
       </div>
     `;
   }).join("");
+
+  container.querySelectorAll(".tipos-vinculo-contato").forEach(function(spanTipos) {
+    spanTipos.addEventListener("click", function(evento) {
+      var badge = evento.target.closest(".tipo-vinculo-contato");
+      if (!badge) return;
+
+      evento.stopPropagation();
+      abrirModalTipoPessoa(badge.getAttribute("data-id-contato"), badge.getAttribute("data-tipo"));
+    });
+  });
 
   container.querySelectorAll(".btn-editar-contato").forEach(function(botao) {
     botao.addEventListener("click", function(evento) {
@@ -1833,19 +1785,6 @@ function renderizarContatosVinculados(vinculados) {
     });
   });
 
-  container.querySelectorAll(".campo-acao-tipo").forEach(function(campo) {
-    campo.addEventListener("change", function() {
-      var form = this.closest(".form-editar-contato");
-      if (!form) return;
-
-      var boxAtual = form.querySelector(".box-tipo-atual");
-      var boxNovo = form.querySelector(".box-tipo-novo");
-
-      if (boxAtual) boxAtual.classList.toggle("hidden", this.value !== "alterar");
-      if (boxNovo) boxNovo.classList.toggle("hidden", this.value === "manter");
-    });
-  });
-
   container.querySelectorAll(".campo-editar-telefone").forEach(function(campo) {
     campo.addEventListener("input", function() {
       this.value = aplicarMascaraTelefone(this.value);
@@ -1859,6 +1798,198 @@ function adicionarEstilosExtras() {
   var estilo = document.createElement("style");
   estilo.id = "estilos-extras-vinculo";
   estilo.textContent = `
+    #interface input,
+    #interface select,
+    #interface button,
+    #interface textarea,
+    #lista-tipo-vinculo,
+    .item-tipo-vinculo,
+    .modal-tipo-pessoa,
+    .modal-tipo-pessoa input,
+    .modal-tipo-pessoa button {
+      font-family: inherit;
+    }
+
+    #input-tipo-vinculo,
+    #input-tipo-vinculo::placeholder {
+      font-size: 14px;
+    }
+
+    .item-tipo-vinculo {
+      font-size: 13px !important;
+    }
+
+    .tipo-vinculo-contato {
+      display: inline-block;
+      margin: 2px 0 2px 6px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: #e6f6f6;
+      color: #0b8a8a;
+      font-size: 11px;
+      font-weight: 500;
+      vertical-align: middle;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: border-color 0.15s;
+    }
+
+    .tipo-vinculo-contato:hover {
+      border-color: #0da6a6;
+    }
+
+    .modal-tipo-pessoa-fundo {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: rgba(0, 0, 0, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .modal-tipo-pessoa {
+      background: #ffffff;
+      border-radius: 6px;
+      width: 100%;
+      max-width: 420px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+      font-size: 13px;
+      color: #333;
+    }
+
+    .modal-tipo-pessoa-topo {
+      padding: 14px 16px;
+      border-bottom: 1px solid #eee;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-tipo-pessoa-topo strong {
+      font-size: 15px;
+    }
+
+    .modal-tipo-pessoa-fechar {
+      background: none;
+      border: none;
+      font-size: 20px;
+      line-height: 1;
+      color: #888;
+      cursor: pointer;
+    }
+
+    .modal-tipo-pessoa-corpo {
+      padding: 14px 16px;
+      overflow-y: auto;
+    }
+
+    .modal-tipo-pessoa-corpo .tipo-atual {
+      margin: 0 0 12px;
+      color: #555;
+    }
+
+    .modal-tipo-pessoa-opcoes {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .modal-tipo-pessoa-opcoes label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-weight: normal;
+      margin: 0;
+    }
+
+    .modal-tipo-pessoa-busca {
+      width: 100%;
+      height: 34px;
+      padding: 0 10px;
+      font-size: 13px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+      margin-bottom: 8px;
+    }
+
+    .modal-tipo-pessoa-busca:focus {
+      border-color: #0da6a6;
+      outline: none;
+    }
+
+    .modal-tipo-pessoa-lista {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+
+    .modal-tipo-pessoa-item {
+      padding: 7px 10px;
+      cursor: pointer;
+    }
+
+    .modal-tipo-pessoa-item:hover {
+      background: #f0f0f0;
+    }
+
+    .modal-tipo-pessoa-item.ativo {
+      background: #e6f6f6;
+      color: #0b8a8a;
+      font-weight: 600;
+    }
+
+    .modal-tipo-pessoa-vazio {
+      padding: 10px;
+      color: #888;
+    }
+
+    .modal-tipo-pessoa-erro {
+      color: #d9534f;
+      font-size: 12px;
+      margin: 8px 0 0;
+    }
+
+    .modal-tipo-pessoa-rodape {
+      padding: 12px 16px;
+      border-top: 1px solid #eee;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .modal-tipo-pessoa-rodape button {
+      height: 32px;
+      padding: 0 16px;
+      border-radius: 4px;
+      font-size: 13px;
+      cursor: pointer;
+      border: 1px solid #0da6a6;
+    }
+
+    .modal-tipo-pessoa-cancelar {
+      background: #ffffff;
+      color: #0da6a6;
+    }
+
+    .modal-tipo-pessoa-salvar {
+      background: #0da6a6;
+      color: #ffffff;
+    }
+
+    .modal-tipo-pessoa-salvar:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+
     .form-editar-contato {
       font-family: inherit;
     }
@@ -1912,21 +2043,9 @@ function adicionarEstilosExtras() {
   document.head.appendChild(estilo);
 }
 
-function montarBadgesTipos(tipos) {
+function montarBadgesTipos(tipos, idContato) {
   return (tipos || []).map(function(tipo) {
-    return `<span class="tipo-vinculo-contato" style="display: inline-block; margin: 2px 0 2px 6px; padding: 2px 8px; border-radius: 10px; background: #e6f6f6; color: #0b8a8a; font-size: 11px; font-weight: 500; vertical-align: middle;">${escaparHtml(obterNomeTipoPessoa(tipo))}</span>`;
-  }).join("");
-}
-
-function montarOpcoesTipoPessoa() {
-  return TIPOS_VINCULO.map(function(item) {
-    return `<option value="${escaparHtml(item.value)}">${escaparHtml(item.label)}</option>`;
-  }).join("");
-}
-
-function montarOpcoesTiposAtuais(tipos) {
-  return (tipos || []).map(function(tipo) {
-    return `<option value="${escaparHtml(tipo)}">${escaparHtml(obterNomeTipoPessoa(tipo))}</option>`;
+    return `<span class="tipo-vinculo-contato" data-id-contato="${escaparHtml(idContato)}" data-tipo="${escaparHtml(tipo)}" title="Clique para alterar ou adicionar um tipo">${escaparHtml(obterNomeTipoPessoa(tipo))}</span>`;
   }).join("");
 }
 
@@ -2077,4 +2196,139 @@ async function salvarTipoContatoVinculado(idContato, nomeContato, acao, tipoAtua
     console.error("Erro ao atualizar o tipo pessoa:", erro);
     return { success: false };
   }
+}
+
+function fecharModalTipoPessoa() {
+  var modal = document.getElementById("modal-tipo-pessoa");
+  if (modal) modal.remove();
+}
+
+function abrirModalTipoPessoa(idContato, tipoAtual) {
+  fecharModalTipoPessoa();
+
+  var vinculado = contatosVinculadosPorId[String(idContato)];
+  var itemContato = document.getElementById("vinc-contato-" + idContato);
+  var nomeContato = itemContato ? itemContato.getAttribute("data-nome") : "";
+  var tipoSelecionado = "";
+
+  var fundo = document.createElement("div");
+  fundo.id = "modal-tipo-pessoa";
+  fundo.className = "modal-tipo-pessoa-fundo";
+
+  fundo.innerHTML = `
+    <div class="modal-tipo-pessoa">
+      <div class="modal-tipo-pessoa-topo">
+        <strong>Tipo pessoa${nomeContato ? " - " + escaparHtml(nomeContato) : ""}</strong>
+        <button type="button" class="modal-tipo-pessoa-fechar" title="Fechar">&times;</button>
+      </div>
+
+      <div class="modal-tipo-pessoa-corpo">
+        <p class="tipo-atual">Tipo atual: <strong>${escaparHtml(obterNomeTipoPessoa(tipoAtual))}</strong></p>
+
+        <div class="modal-tipo-pessoa-opcoes">
+          <label><input type="radio" name="acao-tipo-pessoa" value="alterar" checked> Alterar este tipo</label>
+          <label><input type="radio" name="acao-tipo-pessoa" value="adicionar"> Adicionar novo tipo (mantém o atual)</label>
+        </div>
+
+        <input type="text" class="modal-tipo-pessoa-busca" placeholder="Digite para buscar o tipo..." autocomplete="off">
+        <div class="modal-tipo-pessoa-lista"></div>
+
+        <p class="modal-tipo-pessoa-erro hidden"></p>
+      </div>
+
+      <div class="modal-tipo-pessoa-rodape">
+        <button type="button" class="modal-tipo-pessoa-cancelar">Cancelar</button>
+        <button type="button" class="modal-tipo-pessoa-salvar">Salvar</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(fundo);
+
+  var busca = fundo.querySelector(".modal-tipo-pessoa-busca");
+  var lista = fundo.querySelector(".modal-tipo-pessoa-lista");
+  var erro = fundo.querySelector(".modal-tipo-pessoa-erro");
+  var btnSalvar = fundo.querySelector(".modal-tipo-pessoa-salvar");
+
+  function mostrarErro(mensagem) {
+    erro.textContent = mensagem;
+    erro.classList.remove("hidden");
+  }
+
+  function renderizarLista() {
+    var termo = busca.value.trim().toLowerCase();
+
+    var resultados = TIPOS_VINCULO.filter(function(item) {
+      return !termo || item.label.toLowerCase().indexOf(termo) !== -1;
+    });
+
+    if (resultados.length === 0) {
+      lista.innerHTML = '<div class="modal-tipo-pessoa-vazio">Nenhum tipo encontrado</div>';
+      return;
+    }
+
+    lista.innerHTML = resultados.map(function(item) {
+      var classe = item.value === tipoSelecionado ? "modal-tipo-pessoa-item ativo" : "modal-tipo-pessoa-item";
+      return `<div class="${classe}" data-value="${escaparHtml(item.value)}">${escaparHtml(item.label)}</div>`;
+    }).join("");
+  }
+
+  lista.addEventListener("click", function(evento) {
+    var item = evento.target.closest(".modal-tipo-pessoa-item");
+    if (!item) return;
+
+    tipoSelecionado = item.getAttribute("data-value");
+    erro.classList.add("hidden");
+    renderizarLista();
+  });
+
+  busca.addEventListener("input", renderizarLista);
+
+  fundo.querySelector(".modal-tipo-pessoa-fechar").addEventListener("click", fecharModalTipoPessoa);
+  fundo.querySelector(".modal-tipo-pessoa-cancelar").addEventListener("click", fecharModalTipoPessoa);
+
+  fundo.addEventListener("click", function(evento) {
+    if (evento.target === fundo) fecharModalTipoPessoa();
+  });
+
+  btnSalvar.addEventListener("click", async function() {
+    erro.classList.add("hidden");
+
+    if (!tipoSelecionado) {
+      mostrarErro("Selecione um tipo na lista.");
+      return;
+    }
+
+    var acao = fundo.querySelector('input[name="acao-tipo-pessoa"]:checked').value;
+
+    if (acao === "alterar" && tipoSelecionado === String(tipoAtual)) {
+      fecharModalTipoPessoa();
+      return;
+    }
+
+    btnSalvar.disabled = true;
+    btnSalvar.textContent = "Salvando...";
+
+    var resultado = await salvarTipoContatoVinculado(idContato, nomeContato, acao, String(tipoAtual), tipoSelecionado);
+
+    if (!resultado.success) {
+      btnSalvar.disabled = false;
+      btnSalvar.textContent = "Salvar";
+      mostrarErro("Não foi possível salvar o tipo pessoa. " + (resultado.mensagem || "Verifique o console."));
+      return;
+    }
+
+    var spanTipos = itemContato ? itemContato.querySelector(".tipos-vinculo-contato") : null;
+
+    if (spanTipos && vinculado) {
+      spanTipos.innerHTML = montarBadgesTipos(vinculado.tipos, idContato);
+    }
+
+    fecharModalTipoPessoa();
+
+    mostrarMensagem(acao === "adicionar" ? "Novo tipo adicionado com sucesso!" : "Tipo pessoa alterado com sucesso!", "sucesso");
+  });
+
+  renderizarLista();
+  busca.focus();
 }
