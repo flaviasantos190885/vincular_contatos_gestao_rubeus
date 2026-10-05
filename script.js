@@ -5,6 +5,9 @@ const MAPA_PROCESSO_ESPELHO = {
   "83": "76",
   "76": "83"
 };
+const PROCESSO_GESTAO = "76";
+let MAPA_TODOS_TIPOS_PESSOA = {};
+let promessaTiposVinculo = null;
 
 let TIPOS_VINCULO = [
   { value: "107", label: "(Analista) CRM" },
@@ -120,7 +123,7 @@ function iniciar() {
     return;
   }
 
-  carregarTiposVinculo();
+  promessaTiposVinculo = carregarTiposVinculo();
   buscarDadosRegistro();
 }
 
@@ -139,6 +142,10 @@ async function carregarTiposVinculo() {
       data.dadosTiposPessoas.success &&
       Array.isArray(data.dadosTiposPessoas.dados)
     ) {
+      data.dadosTiposPessoas.dados.forEach(function(item) {
+        MAPA_TODOS_TIPOS_PESSOA[String(item.id)] = item.titulo;
+      });
+
       var listaFiltrada = data.dadosTiposPessoas.dados
         .filter(function(item) {
           var titulo = item.titulo || "";
@@ -222,6 +229,13 @@ function criarInterface() {
     </div>
 
     <div id="box-pesquisa" class="box-pesquisa hidden">
+      <div id="container-contatos-vinculados" class="container-resultados" style="margin-bottom: 20px;">
+        <label class="rb-label-form label-lista">Contatos vinculados no processo de gestão</label>
+        <div id="lista-contatos-vinculados" class="lista-contatos-container">
+          <p class="sem-contatos">Carregando contatos vinculados...</p>
+        </div>
+      </div>
+
       <div class="campo-pesquisa">
         <div class="container-input-busca">
           <input id="input-busca" class="input-busca rb-form-field-input" placeholder="Digite o nome do contato...">
@@ -275,6 +289,7 @@ function criarInterface() {
   container.innerHTML = html;
   configurarEventos();
   atualizarListaContatosSelecionados();
+  carregarContatosVinculados();
 
   setTimeout(function() {
     var loadingInicial = document.getElementById("loading-inicial");
@@ -729,11 +744,13 @@ function processarResultadoBusca(data) {
   configurarEventosCadastroContato(nomePesquisado);
 }
 
-async function abrirEdicaoContato(idContato) {
-  var resumo = document.getElementById("resumo-contato-" + idContato);
-  var painel = document.getElementById("editar-contato-" + idContato);
-  var loading = document.getElementById("loading-editar-" + idContato);
-  var form = document.getElementById("form-editar-" + idContato);
+async function abrirEdicaoContato(idContato, prefixo) {
+  prefixo = prefixo || "";
+
+  var resumo = document.getElementById(prefixo + "resumo-contato-" + idContato);
+  var painel = document.getElementById(prefixo + "editar-contato-" + idContato);
+  var loading = document.getElementById(prefixo + "loading-editar-" + idContato);
+  var form = document.getElementById(prefixo + "form-editar-" + idContato);
 
   if (!painel) return;
 
@@ -792,16 +809,20 @@ async function abrirEdicaoContato(idContato) {
   }
 }
 
-function fecharEdicaoContato(idContato) {
-  var resumo = document.getElementById("resumo-contato-" + idContato);
-  var painel = document.getElementById("editar-contato-" + idContato);
+function fecharEdicaoContato(idContato, prefixo) {
+  prefixo = prefixo || "";
+
+  var resumo = document.getElementById(prefixo + "resumo-contato-" + idContato);
+  var painel = document.getElementById(prefixo + "editar-contato-" + idContato);
 
   if (painel) painel.classList.add("hidden");
   if (resumo) resumo.classList.remove("hidden");
 }
 
-async function salvarEdicaoContato(idContato) {
-  var painel = document.getElementById("editar-contato-" + idContato);
+async function salvarEdicaoContato(idContato, prefixo) {
+  prefixo = prefixo || "";
+
+  var painel = document.getElementById(prefixo + "editar-contato-" + idContato);
   if (!painel) return;
 
   var inputNome = painel.querySelector(".campo-editar-nome");
@@ -872,7 +893,7 @@ async function salvarEdicaoContato(idContato) {
       return;
     }
 
-    var itemContato = document.getElementById("contato-" + idContato);
+    var itemContato = document.getElementById(prefixo + "contato-" + idContato);
 
     if (itemContato) {
       itemContato.setAttribute("data-nome", nome);
@@ -888,7 +909,7 @@ async function salvarEdicaoContato(idContato) {
     }
 
     painel.classList.add("hidden");
-    fecharEdicaoContato(idContato);
+    fecharEdicaoContato(idContato, prefixo);
 
     mostrarMensagem("Contato atualizado com sucesso!", "sucesso");
   }
@@ -1310,6 +1331,8 @@ function finalizarProcesso(requisicoesComErro) {
 
       var inputTipoVinculo = document.getElementById("input-tipo-vinculo");
       if (inputTipoVinculo) inputTipoVinculo.value = "";
+
+      carregarContatosVinculados();
     }, 2200);
   }
   else {
@@ -1492,4 +1515,246 @@ async function cadastrarNovoContato() {
       btnCadastrar.innerHTML = "Cadastrar contato";
     }
   }
+}
+
+function escaparHtml(texto) {
+  return String(texto == null ? "" : texto)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function obterNomeTipoPessoa(idTipo) {
+  var id = String(idTipo || "");
+  if (!id) return "";
+
+  if (MAPA_TODOS_TIPOS_PESSOA[id]) return MAPA_TODOS_TIPOS_PESSOA[id];
+
+  var tipo = TIPOS_VINCULO.find(function(item) {
+    return item.value === id;
+  });
+
+  return tipo ? tipo.label : "Tipo " + id;
+}
+
+function obterIdsRegistrosProcessoGestao() {
+  if (dadosRegistroAtual.idProcesso === PROCESSO_GESTAO) {
+    return [String(dadosRegistroAtual.idRegistro)];
+  }
+
+  var resultadoBusca = RBLib.api.buscarRegistros({ id: dadosRegistroAtual.idPessoa }, function() {}, "", false);
+
+  if (!resultadoBusca || !resultadoBusca.success || !resultadoBusca.dados) {
+    return [];
+  }
+
+  var lista = Array.isArray(resultadoBusca.dados) ? resultadoBusca.dados : [resultadoBusca.dados];
+
+  return lista
+    .filter(function(registro) {
+      var idProcesso = registro.processo || registro.idProcesso || registro.funil || registro.idFunil;
+      var etapaNome = (registro.etapaNome || "").toLowerCase();
+      return String(idProcesso) === PROCESSO_GESTAO && etapaNome.indexOf("evas") === -1;
+    })
+    .map(function(registro) {
+      return String(registro.id);
+    });
+}
+
+async function buscarDadosApi(endpoint, id) {
+  var response = await fetch("https://crmrbacademy.apprubeus.com.br/api/" + endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: id,
+      origem: "600",
+      token: "ebbbd780c70a67d9bdc903267c2a0544"
+    })
+  });
+
+  return response.json();
+}
+
+async function carregarContatosVinculados() {
+  var container = document.getElementById("lista-contatos-vinculados");
+  if (!container) return;
+
+  if (!dadosRegistroAtual.idPessoa || !dadosRegistroAtual.idRegistro) {
+    container.innerHTML = `<p class="sem-contatos">Não foi possível identificar o registro atual.</p>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="loading-lista">
+      <div class="spinner"></div>
+      <p>Carregando contatos vinculados...</p>
+    </div>
+  `;
+
+  try {
+    if (promessaTiposVinculo) {
+      await promessaTiposVinculo;
+    }
+
+    var idsRegistros = obterIdsRegistrosProcessoGestao();
+
+    if (idsRegistros.length === 0) {
+      container.innerHTML = `<p class="sem-contatos">Nenhum registro ativo no processo de gestão para este cliente.</p>`;
+      return;
+    }
+
+    var registros = await Promise.all(idsRegistros.map(function(idRegistro) {
+      return buscarDadosApi("Registro/dados", idRegistro);
+    }));
+
+    var vinculados = [];
+    var idsJaAdicionados = {};
+
+    registros.forEach(function(registro) {
+      if (!registro || !registro.success || !registro.dados) return;
+
+      var pessoas = Array.isArray(registro.dados.pessoas) ? registro.dados.pessoas : [];
+
+      pessoas.forEach(function(pessoa) {
+        var id = String(pessoa.id);
+
+        if (String(pessoa.principal) === "1") return;
+        if (id === String(dadosRegistroAtual.idPessoa)) return;
+        if (idsJaAdicionados[id]) return;
+
+        idsJaAdicionados[id] = true;
+        vinculados.push({ id: id, tipo: String(pessoa.tipo || "") });
+      });
+    });
+
+    if (vinculados.length === 0) {
+      container.innerHTML = `<p class="sem-contatos">Nenhum contato vinculado no processo de gestão.</p>`;
+      return;
+    }
+
+    var dadosPessoas = await Promise.all(vinculados.map(function(vinculado) {
+      return buscarDadosApi("Pessoa/dados", vinculado.id).catch(function(erro) {
+        console.warn("Erro ao buscar dados do contato vinculado " + vinculado.id + ":", erro);
+        return null;
+      });
+    }));
+
+    vinculados.forEach(function(vinculado, indice) {
+      var dados = dadosPessoas[indice] && dadosPessoas[indice].success ? dadosPessoas[indice].dados || {} : {};
+      vinculado.nome = dados.nome || "";
+      vinculado.cpf = dados.cpf || "";
+    });
+
+    renderizarContatosVinculados(vinculados);
+  }
+  catch (erro) {
+    console.error("Erro ao carregar contatos vinculados no processo de gestão:", erro);
+    container.innerHTML = `<p class="sem-contatos">Erro ao carregar os contatos vinculados. Verifique o console.</p>`;
+  }
+}
+
+function renderizarContatosVinculados(vinculados) {
+  var container = document.getElementById("lista-contatos-vinculados");
+  if (!container) return;
+
+  var prefixo = "vinc-";
+
+  container.innerHTML = vinculados.map(function(contato) {
+    var id = escaparHtml(contato.id);
+    var nome = escaparHtml(contato.nome || "(sem nome)");
+    var tipo = escaparHtml(obterNomeTipoPessoa(contato.tipo));
+    var cpf = contato.cpf ? aplicarMascaraCPF(contato.cpf) : "-";
+
+    return `
+      <div class="contato-item-resultado" data-id="${id}" data-nome="${nome}" id="${prefixo}contato-${id}" style="display: block; cursor: default;">
+        <div id="${prefixo}resumo-contato-${id}">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span class="nome-contato">${nome} <span class="tipo-vinculo-contato" style="display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 10px; background: #e6f6f6; color: #0b8a8a; font-size: 11px; font-weight: 500; vertical-align: middle;">${tipo}</span></span>
+
+            <button type="button" class="btn-editar-contato" data-id-editar="${id}" style="background: #f0f0f0; border: none; color: #0da6a6; font-size: 12px; font-weight: 500; cursor: pointer; padding: 4px 10px; border-radius: 4px; white-space: nowrap; margin-left: 8px;">
+              Editar
+            </button>
+          </div>
+
+          <span class="cpf-contato" style="display: block;">
+            CPF:
+            ${escaparHtml(cpf)}
+            |
+            <a href="https://crmrbacademy.apprubeus.com.br/contato/${id}" target="_blank" class="link-id">
+              ID: ${id}
+            </a>
+          </span>
+        </div>
+
+        <div id="${prefixo}editar-contato-${id}" class="hidden" style="text-align: left; margin-top: 4px; padding: 12px; border: 1px solid #ddd; border-radius: 4px; background-color: #ffffff; cursor: default;">
+          <div id="${prefixo}loading-editar-${id}" style="display: flex; flex-direction: column; align-items: center; padding: 20px 0;">
+            <div class="spinner" style="width: 26px; height: 26px; margin-bottom: 10px;"></div>
+            <p style="font-size: 12px; color: #888; margin: 0;">Carregando dados do contato...</p>
+          </div>
+
+          <div id="${prefixo}form-editar-${id}" class="hidden">
+            <label class="label-lista">Nome</label>
+            <input class="input-busca campo-editar-nome" placeholder="Nome do contato" style="width: 100%; border-radius: 4px; margin-bottom: 12px;">
+
+            <label class="label-lista">CPF</label>
+            <input class="input-busca campo-editar-cpf" placeholder="000.000.000-00" maxlength="14" style="width: 100%; border-radius: 4px; margin-bottom: 12px;">
+
+            <label class="label-lista">E-mail</label>
+            <input type="email" class="input-busca campo-editar-email" placeholder="email@exemplo.com" style="width: 100%; border-radius: 4px; margin-bottom: 12px;">
+
+            <label class="label-lista">Telefone</label>
+            <input type="tel" class="input-busca campo-editar-telefone" placeholder="(00) 00000-0000" maxlength="15" style="width: 100%; border-radius: 4px; margin-bottom: 8px;">
+
+            <p class="erro-busca hidden campo-editar-erro" style="text-align: left; font-style: normal; padding: 0; margin: 0 0 12px; font-size: 13px;"></p>
+
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+              <button type="button" class="btn-busca btn-cancelar-editar" data-id-editar="${id}" style="background-color: #ffffff; color: #0da6a6; border: 1px solid #0da6a6; width: auto; padding: 0 20px; border-radius: 4px;">
+                <p class="texto-pesquisar">Cancelar</p>
+              </button>
+
+              <button type="button" class="btn-busca btn-salvar-editar" data-id-editar="${id}" style="width: auto; padding: 0 20px; border-radius: 4px; gap: 8px;">
+                <div class="loader-btn hidden loader-editar"></div>
+                <p class="texto-pesquisar">Salvar alterações</p>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  container.querySelectorAll(".btn-editar-contato").forEach(function(botao) {
+    botao.addEventListener("click", function(evento) {
+      evento.stopPropagation();
+      abrirEdicaoContato(this.getAttribute("data-id-editar"), prefixo);
+    });
+  });
+
+  container.querySelectorAll(".btn-cancelar-editar").forEach(function(botao) {
+    botao.addEventListener("click", function(evento) {
+      evento.stopPropagation();
+      fecharEdicaoContato(this.getAttribute("data-id-editar"), prefixo);
+    });
+  });
+
+  container.querySelectorAll(".btn-salvar-editar").forEach(function(botao) {
+    botao.addEventListener("click", function(evento) {
+      evento.stopPropagation();
+      salvarEdicaoContato(this.getAttribute("data-id-editar"), prefixo);
+    });
+  });
+
+  container.querySelectorAll(".campo-editar-cpf").forEach(function(campo) {
+    campo.addEventListener("input", function() {
+      this.value = aplicarMascaraCPF(this.value);
+    });
+  });
+
+  container.querySelectorAll(".campo-editar-telefone").forEach(function(campo) {
+    campo.addEventListener("input", function() {
+      this.value = aplicarMascaraTelefone(this.value);
+    });
+  });
 }
