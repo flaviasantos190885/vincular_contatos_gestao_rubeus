@@ -1,0 +1,366 @@
+@import url("https://fonts.googleapis.com/css2?family=Rubik:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap");
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Rubik", sans-serif;
+  box-shadow: none !important;
+}
+
+#rb-lgpd {
+    display: none;
+}
+
+:root {
+  --color-1: #0da6a6;
+  --color-2: #ecf3f3;
+  --color-3: #808080;
+  --color-4: #4d4d4d;
+  --color-5: #ffb30f;
+  --color-6: #23bf6a;
+  --color-7: #ff0031;
+  --color-8: #ffffff;
+  --color-9: #a2a2a2;
+  --color-10: #d1d1d1;
+}
+
+html, body {
+  height: 100%;
+}
+
+/* Layout principal (altura acompanha o conteúdo visível) */
+.box-pesquisa {
+  width: 100%;
+  max-width: 610px;
+  margin: 0 auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Container de entrada e botão de pesquisa */
+.container-input-busca {
+  display: flex;
+  width: 100%;
+  margin-bottom: 15px;
+}
+
+/* Campo de entrada */
+.input-busca {
+  flex: 1;
+  padding: 10px 15px;
+  border: 1px solid #ddd !important;
+  border-radius: 4px 0 0 4px;
+  font-size: 14px;
+  outline: none;
+  height: 50px !important;
+  box-sizing: border-box;
+}
+
+/* .input-busca:focus {
+  border-color: #10B981;
+} */
+
+/* Botão de pesquisa */
+.btn-busca {
+  background-color: #0da6a6;
+  color: white;
+  border: none;
+  padding: 0 15px;
+  border-radius: 0 4px 4px 0;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 120px;
+  height: 52px;
+  box-sizing: border-box;
+}
+
+.btn-busca:hover {
+  background-color: #0b8c8c;
+}
+
+/* Texto no botão de pesquisa */
+.texto-pesquisar {
+  margin: 0;
+}
+
+/* Container para resultados da busca */
+.container-resultados {
+  margin-bottom: 15px;
+}
+
+/* Label para listas */
+.label-lista,
+.label-selecionados {
+  font-weight: bold;
+  font-size: 14px;
+  color: #333 !important;
+  margin-bottom: 8px;
+  display: block;
+}
+
+/* Container para a lista de contatos encontrados */
+.lista-contatos-container {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 10px;
+  height: 210px;
+  overflow-y: auto;
+  background-color: white;
+}
+
+/* Item de contato na lista de resultados */
+.contato-item-resultado {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.contato-item-resultado:last-child {
+  margin-bottom: 0;
+}
+
+.contato-item-resultado:hover {
+  background-color: #f0f0f0;
+}
+
+.contato-item-resultado.selecionado {
+  background-color: #E8F5F1;
+  color: #10B981;
+  font-weight: bold;
+}
+
+/* Nome e CPF do contato na lista de resultados */
+.nome-contato {
+  font-weight: 500;
+}
+
+.cpf-contato {
+  color: #777;
+  font-size: 13px;
+}
+
+/* Container para contatos selecionados */
+.container-selecionados {
+  margin-bottom: 15px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Lista de contatos selecionados */
+.contatos-selecionados {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 10px;
+  overflow-y: auto;
+  max-height: 200px;
+  background-color: white;
+}
+
+/* Item de contato selecionado */
+.contato-item-selecionado {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.contato-item-selecionado:last-child {
+  margin-bottom: 0;
+}
+
+/* Nome do contato selecionado */
+.nome-contato-selecionado {
+  font-weight: bold;
+  color: #333;
+}
+
+/* Botão para remover contato */
+.btn-remover-contato {
+  background-color: transparent;
+  color: #e74c3c;
+  border: 1px solid #e74c3c;
+  border-radius: 4px;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.btn-remover-contato:hover {
+  background-color: #e74c3c;
+  color: white;
+}
+
+/* Mensagem quando não há contatos selecionados ou encontrados */
+.sem-contatos,
+.erro-busca {
+  color: #888;
+  font-style: italic;
+  text-align: center;
+  padding: 15px;
+  margin: 0;
+}
+
+.erro-busca {
+  color: #e74c3c;
+}
+
+/* Container do botão para concluir (logo abaixo do conteúdo) */
+.container-concluir {
+  margin-top: 5px;
+}
+
+/* Botão para concluir */
+.btn-concluir {
+  background-color: #0da6a6;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 15px 25px;
+  height: 50px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.btn-concluir:hover {
+  background-color: #0b8c8c;
+}
+
+.btn-concluir:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+/* Loader para indicar carregamento */
+.loader-btn {
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top: 2px solid white;
+  width: 14px;
+  height: 14px;
+  animation: spin 1s linear infinite;
+}
+
+/* Utilitários */
+.hidden {
+  display: none !important;
+}
+
+/* Estilos para mensagens de status*/
+.mensagem-status {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 15px 20px;
+  border-radius: 4px;
+  color: white;
+  font-size: 14px;
+  z-index: 1000;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  transition: opacity 0.5s;
+  text-align: center;
+  max-width: 90%;
+}
+
+.mensagem-sucesso {
+  background-color: #10B981;
+}
+
+.mensagem-erro {
+  background-color: #e74c3c;
+}
+
+.mensagem-aviso {
+  background-color: #f39c12;
+}
+
+.link-id {
+  color: #0da6a6;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.link-id:hover {
+  color: #0b8c8c;
+  text-decoration: underline;
+}
+
+.tag-aira {
+  display: inline-block;
+  background-color: #dcebfd;
+  color: rgb(29, 78, 216);
+  padding: 2px 8px;
+  border: 1px solid #a6ceff;
+  border-radius: 50px;
+  font-size: 12px;
+  font-weight: 500;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.loading-inicial {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  min-height: 300px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.95);
+  z-index: 9999;
+}
+
+.loading-lista {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #3498db;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 15px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-inicial p,
+.loading-lista p {
+  color: #666;
+  font-size: 14px;
+  margin: 0;
+}

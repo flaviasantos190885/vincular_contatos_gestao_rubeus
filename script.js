@@ -1827,8 +1827,8 @@ function adicionarEstilosExtras() {
     }
 
     #interface .container-concluir {
-      margin-top: 20px !important;
-      position: static !important;
+      margin-top: 5px !important;
+      padding-top: 0 !important;
     }
 
     #interface input,
@@ -1907,7 +1907,7 @@ function adicionarEstilosExtras() {
       max-height: 90vh;
       display: flex;
       flex-direction: column;
-      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25) !important;
       font-size: 13px;
       color: #333;
     }
@@ -2092,7 +2092,7 @@ function adicionarEstilosExtras() {
       font-family: inherit;
       font-size: 13px;
       color: #333;
-      height: 34px;
+      height: 34px !important;
       padding: 0 10px;
       margin-bottom: 10px !important;
       border: 1px solid #ddd;
