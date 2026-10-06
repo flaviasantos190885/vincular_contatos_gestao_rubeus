@@ -7,6 +7,12 @@ const MAPA_PROCESSO_ESPELHO = {
 };
 const PROCESSO_GESTAO = "76";
 let MAPA_TODOS_TIPOS_PESSOA = {};
+
+// Nomes de tipos que aparecem nos vínculos mas não estão na lista de escolha.
+// Usados só para exibir; se a busca de tipos no CRM funcionar, os nomes vêm de lá.
+const NOMES_TIPOS_EXTRAS = {
+  "10": "Não identificado"
+};
 let promessaTiposVinculo = null;
 let contatosVinculadosPorId = {};
 
@@ -1554,7 +1560,10 @@ function obterNomeTipoPessoa(idTipo) {
     return item.value === id;
   });
 
-  return tipo ? tipo.label : "Tipo " + id;
+  if (tipo) return tipo.label;
+  if (NOMES_TIPOS_EXTRAS[id]) return NOMES_TIPOS_EXTRAS[id];
+
+  return "Tipo " + id;
 }
 
 function obterIdsRegistrosProcessoGestao() {
@@ -1644,6 +1653,11 @@ async function carregarContatosVinculados() {
         var id = String(pessoa.id);
 
         var tipo = String(pessoa.tipo || "");
+
+        var nomeTipoRegistro = pessoa.tipoNome || pessoa.nomeTipo || pessoa.tipoTitulo || pessoa.tituloTipo || pessoa.tipoPessoa;
+        if (tipo && typeof nomeTipoRegistro === "string" && nomeTipoRegistro && !MAPA_TODOS_TIPOS_PESSOA[tipo]) {
+          MAPA_TODOS_TIPOS_PESSOA[tipo] = nomeTipoRegistro;
+        }
 
         if (String(pessoa.principal) === "1") return;
         if (id === String(dadosRegistroAtual.idPessoa)) return;
