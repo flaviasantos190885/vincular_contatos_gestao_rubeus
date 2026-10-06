@@ -1322,8 +1322,8 @@ function finalizarProcesso(requisicoesComErro) {
     var nomesVinculados = contatosSelecionados.map(function(contato) { return contato.nome; }).join(", ");
 
     var mensagemSucesso = quantidade === 1
-      ? `✓ ${nomesVinculados} vinculado(a) com sucesso!`
-      : `✓ ${quantidade} contatos vinculados com sucesso: ${nomesVinculados}`;
+      ? `${nomesVinculados} vinculado(a) com sucesso!`
+      : `${quantidade} contatos vinculados com sucesso: ${nomesVinculados}`;
 
     mostrarMensagem(mensagemSucesso, "sucesso");
 
