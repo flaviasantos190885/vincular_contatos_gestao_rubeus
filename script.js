@@ -259,28 +259,6 @@ function criarInterface() {
         <div id="contatos-selecionados" class="contatos-selecionados"></div>
       </div>
 
-      <div class="container-tipo-vinculo">
-        <label class="rb-label-form">Tipo de vínculo</label>
-
-        <div style="position: relative;">
-          <input
-            id="input-tipo-vinculo"
-            class="input-busca"
-            placeholder="Digite para buscar o tipo de vínculo..."
-            autocomplete="off"
-            style="width: 100%; border-radius: 4px;"
-          >
-
-          <input type="hidden" id="select-tipo-vinculo" value="">
-
-          <div
-            id="lista-tipo-vinculo"
-            class="hidden"
-            style="position: absolute; top: 100%; left: 0; right: 0; z-index: 50; background: #ffffff; border: 1px solid #ddd; border-radius: 4px; max-height: 220px; overflow-y: auto; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); margin-top: 4px;"
-          ></div>
-        </div>
-      </div>
-
       <div class="container-concluir">
         <button id="btn-concluir" class="btn-concluir">Vincular contatos</button>
       </div>
@@ -976,10 +954,15 @@ function atualizarListaContatosSelecionados() {
   for (var i = 0; i < contatosSelecionados.length; i++) {
     var contato = contatosSelecionados[i];
 
+    var botaoTipo = contato.tipo
+      ? `<span class="tipo-vinculo-contato btn-escolher-tipo" data-id="${contato.id}" title="Clique para trocar o tipo">${escaparHtml(obterNomeTipoPessoa(contato.tipo))}</span>`
+      : `<button type="button" class="btn-escolher-tipo btn-escolher-tipo-vazio" data-id="${contato.id}">+ Tipo de vínculo</button>`;
+
     html += `
       <div id="selecionado-${contato.id}" class="contato-item-selecionado">
         <span class="nome-contato-selecionado">
           ${contato.nome}
+          ${botaoTipo}
         </span>
 
         <button class="btn-remover-contato" data-id="${contato.id}">
@@ -990,6 +973,26 @@ function atualizarListaContatosSelecionados() {
   }
 
   container.innerHTML = html;
+
+  container.querySelectorAll(".btn-escolher-tipo").forEach(function(botao) {
+    botao.addEventListener("click", function(evento) {
+      evento.stopPropagation();
+
+      var idContato = this.getAttribute("data-id");
+      var contatoSelecionado = contatosSelecionados.find(function(item) {
+        return String(item.id) === String(idContato);
+      });
+
+      if (!contatoSelecionado) return;
+
+      abrirModalTipoPessoa(contatoSelecionado.id, contatoSelecionado.tipo || "", contatoSelecionado.nome, {
+        aoEscolher: function(tipoEscolhido) {
+          contatoSelecionado.tipo = tipoEscolhido;
+          atualizarListaContatosSelecionados();
+        }
+      });
+    });
+  });
 
   var botoesRemover = container.querySelectorAll(".btn-remover-contato");
 
@@ -1020,14 +1023,15 @@ async function concluirVinculacao() {
     return;
   }
 
-  var selectTipoVinculo = document.getElementById("select-tipo-vinculo");
+  var semTipo = contatosSelecionados.filter(function(contato) {
+    return !contato.tipo;
+  });
 
-  if (!selectTipoVinculo || !selectTipoVinculo.value) {
-    mostrarMensagem("Selecione o tipo de vínculo antes de continuar.", "aviso");
+  if (semTipo.length > 0) {
+    mostrarMensagem("Escolha o tipo de vínculo de: " + semTipo.map(function(contato) { return contato.nome; }).join(", "), "aviso");
     return;
   }
 
-  var tipoVinculo = selectTipoVinculo.value;
   var btnConcluir = document.getElementById("btn-concluir");
 
   if (btnConcluir) {
@@ -1043,34 +1047,33 @@ async function concluirVinculacao() {
 
   var erros = 0;
 
-  if (tipoVinculo === "16" && contatosSelecionados.length > 0) {
-    var novaPessoaPrincipal = contatosSelecionados[0];
+  for (var i = 0; i < contatosSelecionados.length; i++) {
+    var contato = contatosSelecionados[i];
+    var tipoVinculo = String(contato.tipo);
 
-    alterarPessoaPrincipal(novaPessoaPrincipal.id, async function(sucesso) {
-      if (!sucesso) {
-        finalizarProcesso(1);
-        return;
+    if (tipoVinculo === "16") {
+      var sucessoPrincipal = await new Promise(function(resolve) {
+        alterarPessoaPrincipal(contato.id, resolve);
+      });
+
+      if (!sucessoPrincipal) {
+        erros++;
+        continue;
       }
 
-      await replicarVinculoProcessoGestao(novaPessoaPrincipal, tipoVinculo);
+      await replicarVinculoProcessoGestao(contato, tipoVinculo);
 
       if (REGISTRAR_EVENTO_VINCULO) {
         try {
-          await cadastrarEventoVinculo(novaPessoaPrincipal, tipoVinculo);
+          await cadastrarEventoVinculo(contato, tipoVinculo);
         }
         catch (erroEvento) {
           console.warn(erroEvento);
         }
       }
 
-      finalizarProcesso(0);
-    });
-
-    return;
-  }
-
-  for (var i = 0; i < contatosSelecionados.length; i++) {
-    var contato = contatosSelecionados[i];
+      continue;
+    }
 
     try {
       var resultado = await enviarVinculo(contato, tipoVinculo);
@@ -1853,6 +1856,23 @@ function adicionarEstilosExtras() {
       border-color: #0da6a6;
     }
 
+    .btn-escolher-tipo-vazio {
+      margin-left: 8px;
+      padding: 2px 10px;
+      border: 1px dashed #0da6a6;
+      border-radius: 10px;
+      background: #ffffff;
+      color: #0da6a6;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      vertical-align: middle;
+    }
+
+    .btn-escolher-tipo-vazio:hover {
+      background: #e6f6f6;
+    }
+
     .modal-tipo-pessoa-fundo {
       position: fixed;
       inset: 0;
@@ -2254,11 +2274,14 @@ function fecharModalTipoPessoa() {
   if (modal) modal.remove();
 }
 
-function abrirModalTipoPessoa(idContato, tipoAtual, nomeContato) {
+function abrirModalTipoPessoa(idContato, tipoAtual, nomeContato, opcoes) {
   fecharModalTipoPessoa();
 
+  opcoes = opcoes || {};
+  var modoSelecao = typeof opcoes.aoEscolher === "function";
+
   nomeContato = nomeContato || "";
-  var tipoSelecionado = "";
+  var tipoSelecionado = modoSelecao ? String(tipoAtual || "") : "";
   var acao = "alterar";
 
   var fundo = document.createElement("div");
@@ -2268,15 +2291,15 @@ function abrirModalTipoPessoa(idContato, tipoAtual, nomeContato) {
   fundo.innerHTML = `
     <div class="modal-tipo-pessoa">
       <div class="modal-tipo-pessoa-topo">
-        <strong>Tipo pessoa${nomeContato ? " - " + escaparHtml(nomeContato) : ""}</strong>
+        <strong>${modoSelecao ? "Tipo de vínculo" : "Tipo pessoa"}${nomeContato ? " - " + escaparHtml(nomeContato) : ""}</strong>
         <button type="button" class="modal-tipo-pessoa-fechar" title="Fechar">&times;</button>
       </div>
 
       <div class="modal-tipo-pessoa-corpo">
-        <p class="tipo-atual">Tipo atual: <strong>${escaparHtml(obterNomeTipoPessoa(tipoAtual))}</strong></p>
+        <p class="tipo-atual${tipoAtual ? "" : " hidden"}">Tipo atual: <strong>${escaparHtml(obterNomeTipoPessoa(tipoAtual))}</strong></p>
 
-        <p class="modal-tipo-pessoa-pergunta">O que deseja fazer?</p>
-        <div class="modal-tipo-pessoa-opcoes">
+        <p class="modal-tipo-pessoa-pergunta${modoSelecao ? " hidden" : ""}">O que deseja fazer?</p>
+        <div class="modal-tipo-pessoa-opcoes${modoSelecao ? " hidden" : ""}">
           <button type="button" class="modal-tipo-pessoa-opcao ativa" data-acao="alterar">
             <strong>Alterar este tipo</strong>
             <span>Troca o tipo atual pelo novo</span>
@@ -2295,7 +2318,7 @@ function abrirModalTipoPessoa(idContato, tipoAtual, nomeContato) {
 
       <div class="modal-tipo-pessoa-rodape">
         <button type="button" class="modal-tipo-pessoa-cancelar">Cancelar</button>
-        <button type="button" class="modal-tipo-pessoa-salvar">Salvar</button>
+        <button type="button" class="modal-tipo-pessoa-salvar">${modoSelecao ? "Selecionar" : "Salvar"}</button>
       </div>
     </div>
   `;
@@ -2363,6 +2386,12 @@ function abrirModalTipoPessoa(idContato, tipoAtual, nomeContato) {
 
     if (!tipoSelecionado) {
       mostrarErro("Selecione um tipo na lista.");
+      return;
+    }
+
+    if (modoSelecao) {
+      fecharModalTipoPessoa();
+      opcoes.aoEscolher(tipoSelecionado);
       return;
     }
 
