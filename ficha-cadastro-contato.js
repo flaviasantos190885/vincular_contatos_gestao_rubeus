@@ -49,8 +49,8 @@ function sucessoRBLib() {
 }
 
 (function() {
-    // Lista de dados fornecida
-    const dadosTitulos = [
+    // Lista fixa: usada só se não for possível buscar os tipos no CRM
+    let dadosTitulos = [
         { "id": "45", "titulo": "(Cliente) Analista Administrativo" },
         { "id": "52", "titulo": "(Cliente) Analista Comercial" },
         { "id": "60", "titulo": "(Cliente) Analista Contábil" },
@@ -135,6 +135,45 @@ function sucessoRBLib() {
         { "id": "74", "titulo": "(Cliente) Vice-Reitor" },
         { "id": "10", "titulo": "Não identificado" }
     ];
+
+    // Busca os tipos de pessoa direto do CRM, assim tipos novos entram sozinhos na lista
+    carregarTiposPessoaCRM();
+
+    async function carregarTiposPessoaCRM() {
+        try {
+            const response = await fetch("https://crmrbacademy.apprubeus.com.br/api/Navegacao/Tela/123/2/", {
+                method: "GET",
+                headers: { "Content-Type": "application/json" }
+            });
+
+            const data = await response.json();
+
+            if (!data || !data.dadosTiposPessoas || !data.dadosTiposPessoas.success || !Array.isArray(data.dadosTiposPessoas.dados)) {
+                console.warn("Resposta inesperada ao buscar os tipos de pessoa no CRM. Usando lista fixa.", data);
+                return;
+            }
+
+            const listaCRM = data.dadosTiposPessoas.dados
+                .filter(function(item) {
+                    const titulo = item.titulo || "";
+                    return titulo.indexOf("(Cliente)") === 0 || titulo === "Não identificado";
+                })
+                .map(function(item) {
+                    return { id: String(item.id), titulo: item.titulo };
+                })
+                .sort(function(a, b) {
+                    return a.titulo.localeCompare(b.titulo, "pt-BR");
+                });
+
+            if (listaCRM.length > 0) {
+                dadosTitulos = listaCRM;
+                console.log("Tipos de pessoa carregados do CRM:", dadosTitulos.length);
+            }
+        }
+        catch (erro) {
+            console.warn("Não foi possível buscar os tipos de pessoa no CRM. Usando lista fixa.", erro);
+        }
+    }
 
     // usca robusta: localiza o campo se o ID ou NAME apenas "contiverem" o texto final do campo
     const intervaloBusca = setInterval(function() {
@@ -318,3 +357,106 @@ async function vinculaPessoaRegistroSelecionado() {
 
     return await RBLib.api.enviarEvento(url, {descricao: descricao}, ()=>{}, "local", true);
 }
+
+// Campo "RpR Tag": só existe a opção RpR, então ela é marcada automaticamente e o campo fica oculto
+(function() {
+    const TEXTO_CAMPO = /rpr\s*tag/i;
+    const TEXTO_OPCAO = /rpr/i;
+    let tentativas = 0;
+
+    const intervaloTag = setInterval(function() {
+        tentativas++;
+
+        if (marcarEOcultarCampoTag() || tentativas > 60) {
+            clearInterval(intervaloTag);
+
+            if (tentativas > 60) {
+                console.warn('Campo "RpR Tag" não encontrado no formulário.');
+            }
+        }
+    }, 500);
+
+    function encontrarContainerCampo() {
+        const candidatos = document.querySelectorAll("label, legend, span, p, strong, b");
+
+        for (let i = 0; i < candidatos.length; i++) {
+            const elemento = candidatos[i];
+            const texto = (elemento.textContent || "").trim();
+
+            if (texto.length > 40 || !TEXTO_CAMPO.test(texto)) continue;
+
+            let container = elemento.parentElement;
+
+            for (let nivel = 0; container && nivel < 5; nivel++) {
+                const campos = container.querySelectorAll("select, input:not([type=hidden])");
+
+                if (campos.length > 0) {
+                    const nomes = new Set(Array.from(campos).map(function(campo) {
+                        return campo.name || campo.id;
+                    }));
+
+                    // Se o container já pega mais de um campo, não é o bloco só do RpR Tag
+                    return nomes.size === 1 ? container : null;
+                }
+
+                container = container.parentElement;
+            }
+        }
+
+        return null;
+    }
+
+    function textoDaOpcao(input) {
+        const label = (input.id && document.querySelector('label[for="' + input.id + '"]')) || input.closest("label");
+        return (label ? label.textContent : "") + " " + (input.value || "");
+    }
+
+    function marcarEOcultarCampoTag() {
+        const container = encontrarContainerCampo();
+        if (!container) return false;
+
+        let marcou = false;
+
+        const select = container.querySelector("select");
+
+        if (select) {
+            const opcoes = Array.from(select.options).filter(function(opcao) {
+                return opcao.value !== "";
+            });
+
+            const opcaoRpR = opcoes.find(function(opcao) {
+                return TEXTO_OPCAO.test(opcao.textContent) || TEXTO_OPCAO.test(opcao.value);
+            }) || (opcoes.length === 1 ? opcoes[0] : null);
+
+            if (opcaoRpR) {
+                opcaoRpR.selected = true;
+                select.dispatchEvent(new Event("input", { bubbles: true }));
+                select.dispatchEvent(new Event("change", { bubbles: true }));
+                marcou = true;
+            }
+        }
+        else {
+            const opcoes = Array.from(container.querySelectorAll('input[type="checkbox"], input[type="radio"]'));
+
+            const opcaoRpR = opcoes.find(function(input) {
+                return TEXTO_OPCAO.test(textoDaOpcao(input));
+            }) || (opcoes.length === 1 ? opcoes[0] : null);
+
+            if (opcaoRpR) {
+                if (!opcaoRpR.checked) opcaoRpR.click();
+                if (!opcaoRpR.checked) opcaoRpR.checked = true;
+                opcaoRpR.dispatchEvent(new Event("change", { bubbles: true }));
+                marcou = true;
+            }
+        }
+
+        if (!marcou) {
+            console.warn('Campo "RpR Tag" encontrado, mas a opção RpR não foi localizada.', container);
+            return true;
+        }
+
+        container.style.display = "none";
+        console.log('Campo "RpR Tag" marcado com RpR e ocultado.');
+        return true;
+    }
+})();
