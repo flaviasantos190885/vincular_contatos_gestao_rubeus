@@ -360,7 +360,7 @@ async function vinculaPessoaRegistroSelecionado() {
 
 // Campo "RpR Tag": só existe a opção RpR, então ela é marcada automaticamente e o campo fica oculto
 (function() {
-    const TEXTO_CAMPO = /rpr\s*tag/i;
+    const TEXTO_CAMPO = /rpr\W*tag/i;
     const TEXTO_OPCAO = /rpr/i;
     let tentativas = 0;
 
@@ -451,8 +451,11 @@ async function vinculaPessoaRegistroSelecionado() {
         }
 
         if (!marcou) {
-            console.warn('Campo "RpR Tag" encontrado, mas a opção RpR não foi localizada.', container);
-            return true;
+            // As opções podem ainda estar carregando; tenta de novo no próximo ciclo
+            if (tentativas === 60) {
+                console.warn('Campo "RpR Tag" encontrado, mas a opção RpR não foi localizada.', container.innerHTML);
+            }
+            return false;
         }
 
         container.style.display = "none";
