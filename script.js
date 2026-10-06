@@ -1819,6 +1819,18 @@ function adicionarEstilosExtras() {
   var estilo = document.createElement("style");
   estilo.id = "estilos-extras-vinculo";
   estilo.textContent = `
+    #interface,
+    #interface .box-pesquisa {
+      height: auto !important;
+      min-height: 0 !important;
+      justify-content: flex-start !important;
+    }
+
+    #interface .container-concluir {
+      margin-top: 20px !important;
+      position: static !important;
+    }
+
     #interface input,
     #interface select,
     #interface button,
