@@ -254,7 +254,7 @@ function criarInterface() {
         </div>
       </div>
 
-      <div id="contatos-selecionados-container" class="container-selecionados">
+      <div id="contatos-selecionados-container" class="container-selecionados hidden">
         <label class="rb-label-form label-selecionados">Contatos selecionados</label>
         <div id="contatos-selecionados" class="contatos-selecionados"></div>
       </div>
@@ -943,6 +943,9 @@ function selecionarContato(idContato, nomeContato) {
 function atualizarListaContatosSelecionados() {
   var container = document.getElementById("contatos-selecionados");
   if (!container) return;
+
+  var containerSelecionados = document.getElementById("contatos-selecionados-container");
+  if (containerSelecionados) containerSelecionados.classList.toggle("hidden", contatosSelecionados.length === 0);
 
   if (contatosSelecionados.length === 0) {
     container.innerHTML = `<p class="sem-contatos">Nenhum contato selecionado</p>`;
